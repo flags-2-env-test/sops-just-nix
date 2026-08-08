@@ -1,35 +1,25 @@
 # sops-just-nix
 
-sops environment fixture for the toolchain combination: **sops + just + nix**.
+Just+Nix port of the ORESoftware SOPS environment contract. The security behavior is intentionally inherited from the clean references:
 
-Part of a matrix that proves the sops `env/enc` ↔ `env/dec` pattern behaves
-identically across toolchains **and** on both sides of a container boundary.
-Same contract in every fixture (`scripts/assert.sh`); only the surrounding
-tooling differs.
+- `flags-2-env-test/sops-just@933a239388449901bf8cccfd3db5c4d79fdec039`
+- `flags-2-env-test/sops-nix@80ec3a48676ec366f0320b8b953008e57a9ef0bc`
 
-## Why the container half matters
+This fixture has **no committed private age identity and no committed ciphertext**. Every run generates a fresh identity, exact dev/prod SOPS rules and synthetic ciphertext at runtime, validates the ignored decrypted state and managed root `.env` symlink, then removes all runtime state.
 
-Every defect this pattern has actually shipped was invisible from one side:
+## What this variant adds
 
-| Defect | Visible from |
-|---|---|
-| `dd … status=none` is GNU-only, so the secure overwrite silently no-opped | Linux only |
-| `python3` missing from the nix devshell | inside `nix develop` only |
-| k8s Secret named from `basename(pwd)` → `w-local` under a `/w` mount | container only |
-| `sops exec-env` needs `/bin/sh`, so it cannot run on distroless | container only |
+Just is deliberately only an invocation layer. `nix develop` supplies `just`, SOPS, age, Git, Python and shell/core utilities from the exact pinned nixpkgs revision, then `just verify` runs the same shared `scripts/assert.sh` contract. The direct `nix run .#verify` path is retained as a reference so wrapper drift is visible.
 
-So each fixture asserts on the host **and** in Docker, and CI runs both.
+The same Just-inside-Nix path also runs inside the clean container boundary.
 
-## Run it
+## Run
 
 ```sh
-just verify                 # host
-docker build -t sops-just-nix . && docker run --rm sops-just-nix   # container
+nix run .#verify
+nix develop --command just verify
+docker build -t sops-just-nix-runtime-fixture .
+docker run --rm sops-just-nix-runtime-fixture
 ```
 
-## The committed key is intentional
-
-`age.key` is a **throwaway** private key, committed so CI can decrypt with zero
-secrets configured. Every value it protects is fake. It exists to make the e2e
-real; never reuse it. In a production repo the private key is never committed —
-see the recipient-roster model in `.sops.yaml`.
+Tracking: DEN-2919 / DEN-2636.
